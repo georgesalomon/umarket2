@@ -52,6 +52,13 @@ def _normalize_product(record: Dict[str, Any]) -> Dict[str, Any]:
             normalized["quantity"] = int(quantity)
         except ValueError:
             pass
+    category = normalized.get("category")
+    if not category:
+        normalized["category"] = "miscellaneous"
+    elif isinstance(category, str):
+        normalized["category"] = category
+    else:
+        normalized["category"] = str(category)
     return normalized
 
 
@@ -114,7 +121,9 @@ def create_listing(listing_data: Dict[str, Any]) -> Dict[str, Any]:
     headers = _headers()
     headers["Prefer"] = "return=representation"
     resp = requests.post(url, headers=headers, json=listing_data)
-    resp.raise_for_status()
+    if not resp.ok:
+        print("SUPABASE INSERT ERROR:", resp.status_code, resp.text)
+        resp.raise_for_status()
     created = resp.json()
     return _normalize_product(created[0])
 

@@ -114,6 +114,7 @@ export default function EditListing() {
     price: listing.price,
     quantity: listing.quantity ?? 1,
     sold: listing.sold ?? false,
+    category: listing.category ?? 'miscellaneous',
   };
 
   return (

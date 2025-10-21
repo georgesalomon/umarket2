@@ -1,10 +1,19 @@
 import { useEffect, useState } from 'react';
 
+const CATEGORY_OPTIONS = [
+  { value: 'decor', label: 'Decor' },
+  { value: 'clothing', label: 'Clothing' },
+  { value: 'school-supplies', label: 'School Supplies' },
+  { value: 'tickets', label: 'Tickets' },
+  { value: 'miscellaneous', label: 'Miscellaneous' },
+];
+
 const DEFAULT_VALUES = {
   name: '',
   price: '',
   quantity: '1',
   sold: false,
+  category: '',
 };
 
 export default function ListingForm({
@@ -42,6 +51,7 @@ export default function ListingForm({
     const trimmedName = values.name.trim();
     const parsedPrice = parseFloat(values.price);
     const parsedQuantity = parseInt(values.quantity, 10);
+    const selectedCategory = values.category;
 
     if (!trimmedName) {
       setLocalError('Name is required');
@@ -55,11 +65,16 @@ export default function ListingForm({
       setLocalError('Enter a quantity of 0 or greater');
       return;
     }
+    if (!selectedCategory) {
+      setLocalError('Select a category');
+      return;
+    }
 
     const payload = {
       name: trimmedName,
       price: parsedPrice,
       quantity: parsedQuantity,
+      category: selectedCategory,
     };
 
     if (allowSoldToggle) {
@@ -108,6 +123,23 @@ export default function ListingForm({
           step="1"
         />
       </div>
+      <div style={{ marginBottom: '0.5rem' }}>
+        <label htmlFor="category">Category</label>
+        <br />
+        <select
+          id="category"
+          value={values.category}
+          onChange={(event) => handleChange('category', event.target.value)}
+          required
+        >
+          <option value="">Select a category</option>
+          {CATEGORY_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
       {allowSoldToggle && (
         <div style={{ marginBottom: '0.5rem' }}>
           <label htmlFor="sold">
@@ -138,6 +170,9 @@ function normalizeInitial(initialValues) {
   }
   if (normalized.quantity !== undefined && normalized.quantity !== null) {
     normalized.quantity = normalized.quantity.toString();
+  }
+  if (normalized.category !== undefined && normalized.category !== null) {
+    normalized.category = normalized.category.toString();
   }
   return normalized;
 }

@@ -5,6 +5,14 @@ import Layout from '../../components/Layout';
 import { useAuth } from '../../context/AuthContext';
 import { apiFetch } from '../../utils/apiClient';
 
+const CATEGORY_LABELS = {
+  decor: 'Decor',
+  clothing: 'Clothing',
+  'school-supplies': 'School Supplies',
+  tickets: 'Tickets',
+  miscellaneous: 'Miscellaneous',
+};
+
 export default function ListingDetail() {
   const router = useRouter();
   const { id } = router.query;
@@ -138,6 +146,9 @@ export default function ListingDetail() {
       </p>
       <p>
         <strong>Quantity:</strong> {quantity}
+      </p>
+      <p>
+        <strong>Category:</strong> {CATEGORY_LABELS[listing.category] || 'Miscellaneous'}
       </p>
       <p>
         <strong>Status:</strong> {listing.sold || quantity <= 0 ? 'Sold out' : 'Available'}

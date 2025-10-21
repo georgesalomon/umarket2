@@ -1,7 +1,9 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 
 from pydantic import BaseModel, Field
+
+CategorySlug = Literal["decor", "clothing", "school-supplies", "tickets", "miscellaneous"]
 
 
 class ListingBase(BaseModel):
@@ -10,6 +12,11 @@ class ListingBase(BaseModel):
     name: str = Field(..., example="Microwave")
     price: float = Field(..., example=25.0, gt=0, description="Price in dollars")
     quantity: int = Field(1, ge=0, description="Quantity available")
+    category: CategorySlug = Field(
+        ...,
+        description="Category slug used for homepage grouping",
+        example="decor",
+    )
 
 
 class ListingCreate(ListingBase):
@@ -24,6 +31,11 @@ class ListingUpdate(BaseModel):
     price: Optional[float] = Field(None, gt=0, description="Price in dollars")
     quantity: Optional[int] = Field(None, ge=0, description="Quantity available")
     sold: Optional[bool] = Field(None, description="Whether the item is sold")
+    category: Optional[CategorySlug] = Field(
+        None,
+        description="Category slug used for homepage grouping",
+        example="decor",
+    )
 
 
 class Listing(ListingBase):

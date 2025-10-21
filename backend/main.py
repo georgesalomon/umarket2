@@ -79,6 +79,7 @@ def create_listing(listing: schemas.ListingCreate, user_id: str = Depends(get_cu
         "price": data["price"],
         "quantity": data.get("quantity", 1),
         "sold": False,
+        "category": data["category"],
     }
     created = database.create_listing(listing_data)
     return created
@@ -99,7 +100,7 @@ def edit_listing(
     listing: schemas.ListingUpdate,
     user_id: str = Depends(get_current_user_id),
 ):
-    # update a listing; only the owner should be allowed to edit
+    # update a listing, only the owner should be allowed to edit
 
     existing = database.get_listing(listing_id)
     if not existing:
@@ -120,6 +121,8 @@ def edit_listing(
         update_data["quantity"] = data["quantity"]
     if data.get("sold") is not None:
         update_data["sold"] = data["sold"]
+    if data.get("category") is not None:
+        update_data["category"] = data["category"]
     if not update_data:
         return existing
     updated = database.update_listing(listing_id, update_data)

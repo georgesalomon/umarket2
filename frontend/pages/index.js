@@ -101,40 +101,71 @@ export default function Home() {
           ))}
         </div>
       </section>
-      <h2>Available Listings</h2>
-      {activeCategory && (
-        <div className="listing-filter-banner">
-          <span>
-            Showing <strong>{getCategoryName(activeCategory)}</strong> listings.
-          </span>
-          <Link href="/" className="listing-filter-banner__clear">
-            Clear filter
-          </Link>
+      <section className="home-listings">
+        <div className="home-listings__header">
+          <h2>Available Listings</h2>
+          {user && (
+            <Link href="/items/new" className="home-listings__cta">
+              + Create listing
+            </Link>
+          )}
         </div>
-      )}
-      {loading && <p>Loading…</p>}
-      {!loading && filteredListings.length === 0 && (
-        <p>
-          {activeCategory
-            ? 'No listings found in this category yet—check back soon!'
-            : 'No listings found.'}
-        </p>
-      )}
-      <ul>
-        {filteredListings.map((listing) => (
-          <li key={listing.id} style={{ marginBottom: '0.5rem' }}>
-            <Link href={`/items/${listing.id}`}>{listing.name}</Link> – $
-            {listing.price !== undefined && listing.price !== null
-              ? listing.price.toFixed(2)
-              : '0.00'}
-          </li>
-        ))}
-      </ul>
-      {user && (
-        <div style={{ marginTop: '1.5rem' }}>
-          <Link href="/items/new">Create a new listing</Link>
-        </div>
-      )}
+        {activeCategory && (
+          <div className="listing-filter-banner">
+            <span>
+              Showing <strong>{getCategoryName(activeCategory)}</strong> listings.
+            </span>
+            <Link href="/" className="listing-filter-banner__clear">
+              Clear filter
+            </Link>
+          </div>
+        )}
+        {loading && <p>Loading…</p>}
+        {!loading && filteredListings.length === 0 && (
+          <p>
+            {activeCategory
+              ? 'No listings found in this category yet—check back soon!'
+              : 'No listings found.'}
+          </p>
+        )}
+        {!loading && filteredListings.length > 0 && (
+          <ul className="home-listings__grid">
+            {filteredListings.map((listing) => {
+              const quantity =
+                typeof listing.quantity === 'number' && Number.isFinite(listing.quantity)
+                  ? listing.quantity
+                  : 1;
+              const isSoldOut = listing.sold || quantity <= 0;
+              const priceLabel =
+                typeof listing.price === 'number' ? `$${listing.price.toFixed(2)}` : 'Not set';
+              const categoryValue =
+                typeof listing.category === 'string' && listing.category
+                  ? listing.category.toLowerCase()
+                  : 'miscellaneous';
+              const badgeClass = isSoldOut
+                ? 'home-listings__badge home-listings__badge--sold'
+                : 'home-listings__badge home-listings__badge--available';
+
+              return (
+                <li key={listing.id} className="home-listings__item">
+                  <div className="home-listings__header">
+                    <h3 className="home-listings__title">{listing.name}</h3>
+                    <span className={badgeClass}>{isSoldOut ? 'Sold out' : 'Available'}</span>
+                  </div>
+                  <p className="home-listings__price">{priceLabel}</p>
+                  <p className="home-listings__meta">
+                    Category: <strong>{getCategoryName(categoryValue)}</strong>
+                  </p>
+                  <p className="home-listings__meta">Quantity: {quantity}</p>
+                  <Link href={`/items/${listing.id}`} className="home-listings__link">
+                    View listing
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </Layout>
   );
 }
