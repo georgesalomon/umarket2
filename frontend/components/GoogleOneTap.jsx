@@ -36,11 +36,10 @@ export default function GoogleOneTap({ enabled = true }) {
           console.error('One Tap error', e);
         }
       },
-      // Google/FedCM & UX
       use_fedcm_for_prompt: true,
       context: 'signin',
       ux_mode: 'popup',
-      nonce: hashed,  // hashed nonce to Google
+      nonce: hashed,  
       auto_select: true,
       itp_support: true,
     });

@@ -1,128 +1,203 @@
-import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
-import { supabase } from '../../utils/supabaseClient';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
+import Layout from '../../components/Layout';
+import { useAuth } from '../../context/AuthContext';
+import { apiFetch } from '../../utils/apiClient';
 
-
-// good view of a single item. shows the item attributes and allows authenticated users to submit a purchase request
-//the purchase request is created in the 'orders'table with the status being "pending"
-/**
-  Detailed view of a single item. Shows the item attributes and allows
-  authenticated users to submit a purchase request. The purchase request
-  is created in the `orders` table with status "pending".
- */
 export default function ListingDetail() {
   const router = useRouter();
   const { id } = router.query;
+  const { user, accessToken, loading: authLoading } = useAuth();
   const [listing, setListing] = useState(null);
-  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
+  const [updating, setUpdating] = useState(false);
+  const [orderSubmitting, setOrderSubmitting] = useState(false);
+  const [orderError, setOrderError] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
 
-  useEffect(() => {
-    async function fetchUser() {
-      const { data } = await supabase.auth.getUser();
-      setUser(data?.user || null);
-    }
-    fetchUser();
-    const { data: listener } = supabase.auth.onAuthStateChange((_, session) => {
-      setUser(session?.user || null);
-    });
-    return () => {
-      listener?.subscription?.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
+  const fetchListing = useCallback(async () => {
     if (!id) return;
-    async function fetchListing() {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('listings')
-        .select('*')
-        .eq('id', id)
-        .single();
-      if (error) {
-        setError(error.message);
-      } else {
-        setListing(data);
-      }
+    setLoading(true);
+    try {
+      const data = await apiFetch(`/listings/${id}`);
+      setListing(data);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
       setLoading(false);
     }
-    fetchListing();
   }, [id]);
+
+  useEffect(() => {
+    fetchListing();
+  }, [fetchListing]);
+
+  async function handleToggleSold(nextSold) {
+    if (!accessToken) {
+      setError('You must be signed in to update a listing.');
+      return;
+    }
+    setUpdating(true);
+    setMessage(null);
+    setOrderError(null);
+    try {
+      const updated = await apiFetch(`/listings/${id}`, {
+        method: 'PATCH',
+        body: { sold: nextSold },
+        accessToken,
+      });
+      setListing(updated);
+      setMessage(`Listing marked as ${nextSold ? 'sold' : 'available'}.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  const isOwner = user && listing && listing.seller_id === user.id;
+  const quantity = listing?.quantity ?? 1;
+  const isSoldOut = listing?.sold || quantity <= 0;
+  const canBuy = Boolean(user && !isOwner && !isSoldOut);
 
   async function handleRequestPurchase() {
     if (!user) {
       router.push('/login');
       return;
     }
-    if (!listing) return;
-    if (listing.seller_id === user.id) {
-      setMessage('You cannot purchase your own listing');
+    if (!accessToken) {
+      setOrderError('Missing access token');
       return;
     }
+    if (!listing) return;
+
+    setOrderSubmitting(true);
+    setOrderError(null);
     setMessage(null);
-    setError(null);
-    const { error } = await supabase.from('orders').insert([
-      {
-        listing_id: listing.id,
-        buyer_id: user.id,
-        amount_cents: listing.price_cents,
-        status: 'pending',
-      },
-    ]);
-    if (error) {
-      setError(error.message);
-    } else {
-      setMessage('Purchase request submitted');
+
+    try {
+      await apiFetch('/orders', {
+        method: 'POST',
+        body: { listing_id: listing.id, payment_method: paymentMethod },
+        accessToken,
+      });
+      setMessage('Purchase recorded. The seller has been notified.');
+      setListing((prev) => {
+        if (!prev) return prev;
+        const nextQuantity =
+          typeof prev.quantity === 'number' ? Math.max(prev.quantity - 1, 0) : 0;
+        return {
+          ...prev,
+          quantity: nextQuantity,
+          sold: nextQuantity === 0 ? true : prev.sold,
+        };
+      });
+    } catch (err) {
+      setOrderError(err.message);
+    } finally {
+      setOrderSubmitting(false);
     }
   }
 
-  if (loading)
+  if (loading) {
     return (
-      <div className="container">
+      <Layout>
         <p>Loading…</p>
-      </div>
+      </Layout>
     );
-  if (error)
+  }
+
+  if (error) {
     return (
-      <div className="container">
+      <Layout>
         <p style={{ color: 'red' }}>{error}</p>
-      </div>
+      </Layout>
     );
-  if (!listing)
+  }
+
+  if (!listing) {
     return (
-      <div className="container">
-        <p>Listing not found</p>
-      </div>
+      <Layout>
+        <p>Listing not found.</p>
+      </Layout>
     );
+  }
+
   return (
-    <div className="container">
-      <header className="nav">
-        <h1>{listing.title}</h1>
-        <div>
-          <Link href="/">Back</Link>
-        </div>
-      </header>
+    <Layout>
+      <h1>{listing.name}</h1>
       <p>
-        <strong>Description:</strong> {listing.description}
+        <strong>Price:</strong>{' '}
+        {listing.price !== undefined && listing.price !== null
+          ? `$${listing.price.toFixed(2)}`
+          : 'N/A'}
       </p>
       <p>
-        <strong>Price:</strong> ${listing.price_cents / 100}
+        <strong>Quantity:</strong> {quantity}
       </p>
       <p>
-        <strong>Status:</strong> {listing.status}
+        <strong>Status:</strong> {listing.sold || quantity <= 0 ? 'Sold out' : 'Available'}
       </p>
       {message && <p style={{ color: 'green' }}>{message}</p>}
-      {user ? (
-        <button onClick={handleRequestPurchase}>Request to Buy</button>
+      {orderError && <p style={{ color: 'red' }}>{orderError}</p>}
+
+      {isOwner ? (
+        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+          <Link href={`/items/${listing.id}/edit`}>Edit listing</Link>
+          <button
+            type="button"
+            onClick={() => handleToggleSold(false)}
+            disabled={updating || !listing.sold}
+          >
+            Mark available
+          </button>
+          <button
+            type="button"
+            onClick={() => handleToggleSold(true)}
+            disabled={updating || listing.sold}
+          >
+            Mark sold
+          </button>
+        </div>
       ) : (
-        <p>
-          <Link href="/login">Login</Link> to purchase
-        </p>
+        <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {user ? (
+            canBuy ? (
+              <>
+                <label htmlFor="paymentMethod">
+                  Preferred payment method
+                  <select
+                    id="paymentMethod"
+                    value={paymentMethod}
+                    onChange={(event) => setPaymentMethod(event.target.value)}
+                    style={{ marginLeft: '0.75rem', width: 'auto' }}
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="venmo">Venmo</option>
+                    <option value="paypal">PayPal</option>
+                  </select>
+                </label>
+                <button type="button" onClick={handleRequestPurchase} disabled={orderSubmitting}>
+                  {orderSubmitting ? 'Submitting…' : 'Buy this item'}
+                </button>
+              </>
+            ) : (
+              <p>This item is no longer available.</p>
+            )
+          ) : (
+            <>
+              <p>{isSoldOut ? 'This item is no longer available.' : 'Sign in to purchase this item.'}</p>
+              <button type="button" onClick={() => router.push('/login')} disabled={authLoading}>
+                Sign in to purchase
+              </button>
+            </>
+          )}
+        </div>
       )}
-    </div>
+    </Layout>
   );
 }

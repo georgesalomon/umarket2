@@ -10,15 +10,15 @@ implementation with a FastAPI backend and Next.js frontend.
 
 - **Student‑only access:** Sign-ups are restricted to `umass.edu` email addresses
   using a Supabase Before User Created hook.
-- **Authentication:** Users can register and sign in with email and password.
-- **Item management:** Authenticated users can create, edit and delete
-  marketplace listings. Listings include a title, description, price, category
-  and condition.
-- **Browse listings:** Anyone can view all available items. Individual item
-  pages show full details and allow logged‑in users to submit a purchase
-  request.
-- **Purchase requests:** Buyers can send a request to purchase an item. Each
-  request records the buyer, seller and current status.
+- **Google authentication:** Students sign in with Supabase Google OAuth (including
+  Google One Tap). Tokens are verified by the FastAPI backend.
+- **Listing management:** Authenticated users can create, edit, delete, and toggle
+  availability for their listings while tracking quantity remaining.
+- **Browse listings:** Anyone can view all available items. Individual pages show full
+  details and, when authenticated, allow students to request a purchase.
+- **Purchase workflow:** Buyers record purchases for available items and choose a
+  preferred payment method. Quantities decrement automatically and listings are marked
+  sold when inventory reaches zero.
 
 ## Project structure
 
@@ -32,13 +32,26 @@ umarket/
 │   ├── Dockerfile
 │   └── .env.example
 ├── frontend/        # Next.js application
-│   ├── pages/       # React pages
+│   ├── components/
+│   │   ├── GoogleButton.jsx
+│   │   ├── GoogleOneTap.jsx
+│   │   ├── Layout.jsx
+│   │   └── ListingForm.jsx
+│   ├── context/
+│   │   └── AuthContext.js
+│   ├── pages/
+│   │   ├── _app.js
 │   │   ├── index.js
 │   │   ├── login.js
+│   │   ├── dashboard/
+│   │   │   ├── listings.js
+│   │   │   └── orders.js
 │   │   └── items/
-│   │       ├── new.js
-│   │       └── [id].js
+│   │       ├── [id].js
+│   │       ├── [id]/edit.js
+│   │       └── new.js
 │   ├── utils/
+│   │   ├── apiClient.js
 │   │   └── supabaseClient.js
 │   ├── styles/
 │   │   └── globals.css
@@ -57,52 +70,55 @@ umarket/
    - Create a *Before User Created* hook and attach the `restrict_signup_to_umass`
      Postgres function. The SQL for this function is included below.
    - Toggle the hook to **enabled**.
-3. **Create tables** in the Supabase SQL editor. The following SQL defines
-   minimal `items` and `orders` tables along with row‑level security (RLS)
-   policies to ensure users can only modify their own data:
+3. **Create tables** in the Supabase SQL editor. The base app relies on the
+   `Product` and `Transactions` tables (your project may already have the
+   category-specific tables shown in the ERD above). The SQL below sets up the
+   core data model and row‑level security (RLS) policies:
 
    ```sql
-   -- Items table stores marketplace listings
-   create table if not exists public.items (
-     id serial primary key,
-     user_id uuid references auth.users(id) on delete cascade,
-     title text not null,
-     description text not null,
-     price numeric not null check (price >= 0),
-     category text not null,
-     condition text not null,
-     status text not null default 'available',
-     created_at timestamp with time zone default now(),
-     updated_at timestamp with time zone
-   );
+   -- Core product table (one row per marketplace item)
+   create extension if not exists pgcrypto; -- ensures gen_random_uuid()
 
-   -- Orders table stores purchase requests
-   create table if not exists public.orders (
-     id serial primary key,
-     item_id integer references public.items(id) on delete cascade,
-     buyer_id uuid references auth.users(id) on delete cascade,
+   create table if not exists public."Product" (
+     prod_id uuid primary key default gen_random_uuid(),
      seller_id uuid references auth.users(id) on delete cascade,
-     status text not null default 'pending',
-     created_at timestamp with time zone default now()
+     name text not null,
+     price numeric not null check (price >= 0),
+     quantity integer not null default 1 check (quantity >= 0),
+     sold boolean not null default false,
+     created_at timestamptz not null default now()
    );
 
-   -- Enable RLS and allow owners to manage their own items
-   alter table public.items enable row level security;
-   create policy "Allow item owners read and write access" on public.items
-     for all using (auth.uid() = user_id);
+   -- Optional category tables (Clothing, Decor, etc.) can reference prod_id
+   -- via foreign keys; only the base Product table is required for the app.
 
-   -- Allow all authenticated users to read items
-   create policy "Allow read access for all" on public.items
-     for select using (auth.role() = 'authenticated');
+   create table if not exists public."Transactions" (
+     id bigserial primary key,
+     prod_id uuid references public."Product"(prod_id) on delete cascade,
+     buyer_id uuid references auth.users(id) on delete cascade,
+     payment_method text,
+     created_at timestamptz not null default now()
+   );
 
-   -- Enable RLS for orders and allow buyers or sellers to read their orders
-   alter table public.orders enable row level security;
-   create policy "Allow buyers and sellers access" on public.orders
-     for select using (auth.uid() = buyer_id or auth.uid() = seller_id);
-   create policy "Allow buyers to create orders" on public.orders
-     for insert using (auth.uid() = buyer_id);
-   create policy "Allow sellers to update order status" on public.orders
-     for update using (auth.uid() = seller_id);
+   -- RLS: anyone can read products, only the owner can modify their listings
+   alter table public."Product" enable row level security;
+   create policy "Products readable by all" on public."Product"
+     for select using (true);
+   create policy "Sellers manage their products" on public."Product"
+     using (auth.uid() = seller_id)
+     with check (auth.uid() = seller_id);
+
+   -- RLS for transactions: buyers and sellers can view, buyers insert rows
+   alter table public."Transactions" enable row level security;
+   create policy "Participants can view transactions" on public."Transactions"
+     for select using (
+       auth.uid() = buyer_id
+       or auth.uid() = (
+         select seller_id from public."Product" p where p.prod_id = "Transactions".prod_id
+       )
+     );
+   create policy "Buyers can create transactions" on public."Transactions"
+     for insert with check (auth.uid() = buyer_id);
    ```
 
 4. **Create the `restrict_signup_to_umass` function** in Supabase:
@@ -138,8 +154,13 @@ umarket/
 
    ```bash
    cp backend/.env.example backend/.env
-   # Edit backend/.env and set SUPABASE_URL and SUPABASE_API_KEY
+   # Edit backend/.env and set SUPABASE_URL, SUPABASE_API_KEY, SUPABASE_JWT_SECRET, FRONTEND_URLS
    ```
+
+   If your Supabase tables use different names or primary key columns, you can
+   override the defaults by setting `SUPABASE_PRODUCTS_TABLE`,
+   `SUPABASE_PRODUCT_ID_FIELD`, `SUPABASE_TRANSACTIONS_TABLE`, or
+   `SUPABASE_TRANSACTION_ID_FIELD` in `backend/.env`.
 
 2. Install dependencies and start the server (requires Python 3.10+):
 
@@ -168,7 +189,8 @@ docker run -p 8000:8000 --env-file backend/.env umarket-backend
    ```bash
    cd frontend
    cp .env.local.example .env.local
-   # Edit .env.local and set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
+   # Edit .env.local and set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+   # NEXT_PUBLIC_GOOGLE_CLIENT_ID, and NEXT_PUBLIC_API_BASE
    ```
 
 2. Install dependencies and start the development server:
@@ -179,5 +201,3 @@ docker run -p 8000:8000 --env-file backend/.env umarket-backend
    ```
 
 3. Visit `http://localhost:3000` in your browser to view the site.
-
-

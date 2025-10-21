@@ -5,26 +5,33 @@ from pydantic import BaseModel, Field
 
 
 class ListingBase(BaseModel):
-    # base attributes for listing creation/update,d price is in dollars (converted to cents), category_id optional.
+    # base attributes for product creation/update
 
-    title: str = Field(..., example="Microwave")
-    description: str = Field(..., example="Lightly used microwave, works great.")
+    name: str = Field(..., example="Microwave")
     price: float = Field(..., example=25.0, gt=0, description="Price in dollars")
-    category_id: Optional[int] = Field(None, example=1, description="ID of the category")
+    quantity: int = Field(1, ge=0, description="Quantity available")
 
 
 class ListingCreate(ListingBase):
-    # payload is required to create a new lsiting
+    # payload is required to create a new product listing
     pass
 
 
-class Listing(ListingBase):
-    #full representation of a listing with including server generated fields
+class ListingUpdate(BaseModel):
+    # partial update payload for product listings
 
-    id: int
+    name: Optional[str] = Field(None, example="Microwave")
+    price: Optional[float] = Field(None, gt=0, description="Price in dollars")
+    quantity: Optional[int] = Field(None, ge=0, description="Quantity available")
+    sold: Optional[bool] = Field(None, description="Whether the item is sold")
+
+
+class Listing(ListingBase):
+    # full representation of a product listing including server-managed fields
+
+    id: str
     seller_id: str
-    price_cents: int = Field(..., example=2500, description="Price in cents")
-    status: str = Field("available", example="available")
+    sold: bool = Field(False, description="Whether the item has been sold")
     created_at: datetime
 
     class Config:
@@ -32,21 +39,26 @@ class Listing(ListingBase):
 
 
 class OrderCreate(BaseModel):
-    #payload required to create a new purchase reques
+    # payload required to create a new transaction
 
-    listing_id: int = Field(..., example=1)
+    listing_id: str = Field(..., example="6c73f63a-4f0f-4a84-9620-3aafc4a5d1b5")
+    payment_method: Optional[str] = Field(None, example="cash")
 
 
 class Order(BaseModel):
-    # full representation for an order
+    # full representation for a transaction
 
-    id: int
-    listing_id: int
+    id: str
+    listing_id: str
     buyer_id: str
-    amount_cents: int
-    status: str = Field(..., example="pending")
-    stripe_pi: Optional[str] = Field(None, example="pi_123", description="Stripe payment intent identifier")
-    created_at: datetime
+    seller_id: Optional[str] = Field(None, description="Seller for the associated product")
+    payment_method: Optional[str] = Field(None, example="cash")
+    created_at: Optional[datetime] = None
+    product: Optional[Listing] = None
 
     class Config:
         orm_mode = True
+
+
+class OrderUpdate(BaseModel):
+    payment_method: Optional[str] = Field(None, example="cash")

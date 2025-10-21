@@ -1,8 +1,21 @@
+import { useEffect } from 'react';
+import { useRouter } from 'next/router';
 import GoogleButton from '../components/GoogleButton';
+import Layout from '../components/Layout';
+import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
+  const router = useRouter();
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace('/');
+    }
+  }, [loading, user, router]);
+
   return (
-    <main style={{ padding: 24, maxWidth: 420, margin: '0 auto' }}>
+    <Layout>
       <h1>UMarket – Sign in</h1>
 
       {/* Google only */}
@@ -11,7 +24,6 @@ export default function Login() {
       <p style={{ marginTop: 12, color: '#666' }}>
         Sign in with your UMass Google account to continue.
       </p>
-    </main>
+    </Layout>
   );
 }
-
