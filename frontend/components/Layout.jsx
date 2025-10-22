@@ -11,8 +11,8 @@ export default function Layout({ children, searchSlot = null }) {
     <div className="container">
       <header className="nav">
         <div className="nav__left">
-          <Link href="/">
-            <strong>UMarket</strong>
+          <Link href="/" className="nav__logo">
+            <span>UMarket</span>
           </Link>
           {!loading && user && (
             <>

@@ -156,6 +156,31 @@ a:hover {
   margin-right: 0;
 }
 
+.nav__logo {
+  display: inline-flex;
+  align-items: center;
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 0.025em;
+  text-decoration: none;
+  background: linear-gradient(135deg, #5f8bff, #a68bff 60%, #6ea8ff 100%);
+  background-size: 200% 100%;
+  background-position: 0% 50%;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  transition: background-position 0.35s ease, transform 0.25s ease, filter 0.25s ease;
+}
+
+.nav__logo:hover,
+.nav__logo:focus-visible {
+  background-position: 100% 50%;
+  transform: translateY(-2px);
+  filter: drop-shadow(0 12px 24px rgba(122, 168, 255, 0.35));
+  outline: none;
+}
+
 .nav-search {
   display: flex;
   align-items: center;
