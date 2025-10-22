@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, Literal
+from typing import Optional, Literal 
 
 from pydantic import BaseModel, Field
 
@@ -74,3 +74,15 @@ class Order(BaseModel):
 
 class OrderUpdate(BaseModel):
     payment_method: Optional[str] = Field(None, example="cash")
+
+
+class UserProfile(BaseModel):
+    id: str
+    email: Optional[str] = None
+    full_name: Optional[str] = None
+    profile_description: Optional[str] = None
+    avatar_path: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+    class Config:
+        orm_mode = True

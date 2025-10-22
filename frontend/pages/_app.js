@@ -1,6 +1,7 @@
 import '../styles/globals.css';
 import GoogleOneTap from '../components/GoogleOneTap';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { ThemeProvider } from '../context/ThemeContext';
 
 function GoogleOneTapBridge() {
   const { user, loading } = useAuth();
@@ -9,10 +10,12 @@ function GoogleOneTapBridge() {
 
 function MyApp({ Component, pageProps }) {
   return (
-    <AuthProvider>
-      <GoogleOneTapBridge />
-      <Component {...pageProps} />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <GoogleOneTapBridge />
+        <Component {...pageProps} />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

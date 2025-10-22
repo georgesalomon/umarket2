@@ -1,13 +1,16 @@
 import Link from 'next/link';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
-export default function Layout({ children }) {
+export default function Layout({ children, searchSlot = null }) {
   const { user, loading, signOut, signInWithGoogle } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === 'dark';
 
   return (
     <div className="container">
       <header className="nav">
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div className="nav__left">
           <Link href="/">
             <strong>UMarket</strong>
           </Link>
@@ -19,10 +22,24 @@ export default function Layout({ children }) {
             </>
           )}
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        {searchSlot ? <div className="nav__search">{searchSlot}</div> : <div className="nav__spacer" />}
+        <div className="nav__right">
+          <button
+            type="button"
+            className={`theme-toggle${isDark ? ' theme-toggle--dark' : ''}`}
+            onClick={toggleTheme}
+            aria-pressed={isDark}
+          >
+            <span className="theme-toggle__track">
+              <span className="theme-toggle__thumb" />
+            </span>
+            <span className="theme-toggle__label">{isDark ? 'Dark' : 'Light'} mode</span>
+          </button>
           {!loading && user ? (
             <>
-              <span style={{ fontSize: '0.9rem', color: '#555' }}>{user.email}</span>
+              <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+                {user.email}
+              </span>
               <button type="button" onClick={signOut}>
                 Sign out
               </button>

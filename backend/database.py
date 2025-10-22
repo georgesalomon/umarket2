@@ -12,6 +12,7 @@ PRODUCTS_TABLE: str = os.environ.get("SUPABASE_PRODUCTS_TABLE", "Product")
 PRODUCT_ID_FIELD: str = os.environ.get("SUPABASE_PRODUCT_ID_FIELD", "prod_id")
 TRANSACTIONS_TABLE: str = os.environ.get("SUPABASE_TRANSACTIONS_TABLE", "Transactions")
 TRANSACTION_ID_FIELD: str = os.environ.get("SUPABASE_TRANSACTION_ID_FIELD", "id")
+AVATAR_BUCKET: str = os.environ.get("SUPABASE_AVATAR_BUCKET", "avatars")
 
 
 def _ensure_config():
@@ -156,6 +157,40 @@ def delete_listing(listing_id: str) -> bool:
     )
     resp.raise_for_status()
     return True
+
+
+def _public_storage_url(path: str) -> Optional[str]:
+    if not path:
+        return None
+    if isinstance(path, str) and path.startswith(("http://", "https://")):
+        return path
+    normalized = path.lstrip("/")
+    if not SUPABASE_URL:
+        return None
+    return f"{SUPABASE_URL}/storage/v1/object/public/{AVATAR_BUCKET}/{normalized}"
+
+
+def get_user_profile(user_id: str) -> Optional[Dict[str, Any]]:
+    # fetch a supabase user record including public metadata usable across the app
+
+    _ensure_config()
+    url = f"{SUPABASE_URL}/auth/v1/admin/users/{user_id}"
+    resp = requests.get(url, headers=_headers())
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    data = resp.json()
+    metadata = data.get("user_metadata") or {}
+    avatar_path = metadata.get("avatar_path")
+    profile = {
+        "id": data.get("id"),
+        "email": data.get("email"),
+        "full_name": metadata.get("full_name") or data.get("email"),
+        "profile_description": metadata.get("profile_description") or "",
+        "avatar_path": avatar_path,
+        "avatar_url": _public_storage_url(avatar_path),
+    }
+    return profile
 
 
 def get_orders(filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:

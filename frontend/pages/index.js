@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import Layout from '../components/Layout';
@@ -43,6 +43,10 @@ const CATEGORY_CARDS = [
 export default function Home() {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState(null);
   const { user } = useAuth();
   const router = useRouter();
   const activeCategory =
@@ -63,23 +67,141 @@ export default function Home() {
     fetchListings();
   }, []);
 
-  const filteredListings = activeCategory
-    ? listings.filter((listing) => {
-        const categoryValue =
-          typeof listing.category === 'string' && listing.category
-            ? listing.category.toLowerCase()
-            : 'miscellaneous';
-        return categoryValue === activeCategory;
-      })
-    : listings;
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setSearchResults([]);
+      setSearchError(null);
+      return;
+    }
+
+    const controller = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const params = new URLSearchParams({ sold: 'false', search: searchTerm.trim() });
+        const data = await apiFetch(`/listings?${params.toString()}`);
+        setSearchResults(Array.isArray(data) ? data : []);
+        setSearchError(null);
+      } catch (error) {
+        setSearchError(error.message);
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(controller);
+  }, [searchTerm]);
+
+  const filteredListings = useMemo(() => {
+    const base = searchTerm.trim() ? searchResults : listings;
+    if (!activeCategory) {
+      return base;
+    }
+    return base.filter((listing) => {
+      const categoryValue =
+        typeof listing.category === 'string' && listing.category
+          ? listing.category.toLowerCase()
+          : 'miscellaneous';
+      return categoryValue === activeCategory;
+    });
+  }, [activeCategory, listings, searchResults, searchTerm]);
 
   function getCategoryName(slug) {
     const match = CATEGORY_CARDS.find((category) => category.slug === slug);
     return match ? match.name : slug;
   }
 
+  function handleCategorySelect(slug) {
+    const normalized = slug ? slug.toLowerCase() : null;
+    const isCurrentlyActive = normalized && normalized === activeCategory;
+    router.push(
+      {
+        pathname: '/',
+        query: isCurrentlyActive ? {} : normalized ? { category: normalized } : {},
+      },
+      undefined,
+      { shallow: true },
+    );
+  }
+
+  function highlight(text) {
+    if (!searchTerm.trim()) {
+      return text;
+    }
+    const rawTerm = searchTerm.trim();
+    const escaped = rawTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escaped})`, 'ig');
+    const parts = String(text).split(regex);
+    return parts.map((part, index) =>
+      part.toLowerCase() === rawTerm.toLowerCase() ? (
+        <mark key={`${part}-${index}`} className="search-highlight">
+          {part}
+        </mark>
+      ) : (
+        <span key={`${part}-${index}`}>{part}</span>
+      ),
+    );
+  }
+
+  const hasActiveSearch = Boolean(searchTerm.trim());
+
+  const previewResults = hasActiveSearch ? searchResults.slice(0, 20) : [];
+
+  const searchControl = (
+    <div className="nav-search-wrapper">
+      <div className="nav-search">
+        <span className="nav-search__icon" aria-hidden="true">
+          🔍
+        </span>
+        <input
+          type="search"
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+          placeholder="Search for textbooks, decor, tickets…"
+          aria-label="Search listings"
+        />
+        {searchTerm && (
+          <button type="button" className="nav-search__clear" onClick={() => setSearchTerm('')}>
+            Clear
+          </button>
+        )}
+      </div>
+      {hasActiveSearch && (
+        <div className="nav-search-results" role="status">
+          {searching ? (
+            <p className="nav-search-results__status">Searching…</p>
+          ) : searchError ? (
+            <p className="nav-search-results__status nav-search-results__status--error">{searchError}</p>
+          ) : previewResults.length === 0 ? (
+            <p className="nav-search-results__status">No matches yet.</p>
+          ) : (
+            <ul>
+              {previewResults.map((result) => (
+                <li key={result.id}>
+                  <Link href={`/items/${result.id}`} className="nav-search-results__item">
+                    <span className="nav-search-results__name">{highlight(result.name)}</span>
+                    <span className="nav-search-results__meta">
+                      {typeof result.price === 'number'
+                        ? `$${result.price.toFixed(2)}`
+                        : 'Price pending'}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <Layout>
+    <Layout searchSlot={searchControl}>
+      {hasActiveSearch && (searching || searchError) && (
+        <p className={`search-status${searchError ? ' search-status--error' : ''}`}>
+          {searchError ? searchError : 'Searching…'}
+        </p>
+      )}
       <section className="category-section">
         <h1>Browse by Category</h1>
         <p className="category-section__subtitle">
@@ -121,7 +243,7 @@ export default function Home() {
           </div>
         )}
         {loading && <p>Loading…</p>}
-        {!loading && filteredListings.length === 0 && (
+        {!loading && !searching && filteredListings.length === 0 && (
           <p>
             {activeCategory
               ? 'No listings found in this category yet—check back soon!'
@@ -149,7 +271,9 @@ export default function Home() {
               return (
                 <li key={listing.id} className="home-listings__item">
                   <div className="home-listings__header">
-                    <h3 className="home-listings__title">{listing.name}</h3>
+                    <h3 className="home-listings__title">
+                      {hasActiveSearch ? highlight(listing.name) : listing.name}
+                    </h3>
                     <span className={badgeClass}>{isSoldOut ? 'Sold out' : 'Available'}</span>
                   </div>
                   <p className="home-listings__price">{priceLabel}</p>

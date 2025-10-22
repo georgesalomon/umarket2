@@ -53,39 +53,97 @@ export default function DashboardListings() {
 
   return (
     <Layout>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>My listings</h1>
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <button type="button" onClick={fetchListings} disabled={loading}>
-            Refresh
-          </button>
-          <Link href="/items/new">Create listing</Link>
-        </div>
-      </div>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {loading && <p>Loading listings…</p>}
-      {!loading && listings.length === 0 && <p>You have not created any listings yet.</p>}
-      {!loading && listings.length > 0 && (
-        <ul>
-          {listings.map((listing) => (
-            <li key={listing.id} style={{ marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                <strong>{listing.name}</strong>
-                <span>Status: {listing.sold ? 'Sold' : 'Available'}</span>
-                <span>Quantity: {listing.quantity ?? 1}</span>
-                <span>
-                  Price: $
-                  {typeof listing.price === 'number' ? listing.price.toFixed(2) : '0.00'}
-                </span>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <Link href={`/items/${listing.id}`}>View</Link>
-                  <Link href={`/items/${listing.id}/edit`}>Edit</Link>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <section className="dashboard-listings">
+        <header className="dashboard-listings__header">
+          <div>
+            <h1>My listings</h1>
+            <p className="dashboard-listings__subtitle">
+              Manage your inventory and keep your buyers up to date.
+            </p>
+          </div>
+          <div className="dashboard-listings__actions">
+            <button
+              type="button"
+              className="dashboard-listings__refresh"
+              onClick={fetchListings}
+              disabled={loading}
+            >
+              {loading ? 'Refreshing…' : 'Refresh'}
+            </button>
+            <Link href="/items/new" className="home-listings__cta dashboard-listings__create">
+              + Create listing
+            </Link>
+          </div>
+        </header>
+
+        {error && <p className="dashboard-listings__error">{error}</p>}
+        {loading && <p className="dashboard-listings__status">Loading listings…</p>}
+        {!loading && listings.length === 0 && (
+          <div className="dashboard-listings__empty">
+            <h2>No listings yet</h2>
+            <p>Start by creating your first listing to see it appear here.</p>
+            <Link href="/items/new" className="home-listings__cta">
+              Create listing
+            </Link>
+          </div>
+        )}
+
+        {!loading && listings.length > 0 && (
+          <ul className="dashboard-listings__grid">
+            {listings.map((listing) => {
+              const quantity =
+                typeof listing.quantity === 'number' && Number.isFinite(listing.quantity)
+                  ? listing.quantity
+                  : 1;
+              const price =
+                typeof listing.price === 'number' && Number.isFinite(listing.price)
+                  ? `$${listing.price.toFixed(2)}`
+                  : 'Not set';
+              const isSold = Boolean(listing.sold);
+
+              return (
+                <li key={listing.id} className="dashboard-listings__card">
+                  <div className="dashboard-listings__card-header">
+                    <h3>{listing.name}</h3>
+                    <span
+                      className={`dashboard-listings__badge${
+                        isSold ? ' dashboard-listings__badge--sold' : ' dashboard-listings__badge--available'
+                      }`}
+                    >
+                      {isSold ? 'Sold' : 'Available'}
+                    </span>
+                  </div>
+                  <p className="dashboard-listings__price">{price}</p>
+                  <ul className="dashboard-listings__meta">
+                    <li>
+                      Category:{' '}
+                      <strong>
+                        {typeof listing.category === 'string' && listing.category
+                          ? listing.category
+                          : 'Miscellaneous'}
+                      </strong>
+                    </li>
+                    <li>
+                      Quantity: <strong>{quantity}</strong>
+                    </li>
+                  </ul>
+                  <div className="dashboard-listings__card-actions">
+                    <Link href={`/items/${listing.id}`} className="dashboard-listings__link">
+                      View listing
+                    </Link>
+                    <Link
+                      href={`/items/${listing.id}/edit`}
+                      className="dashboard-listings__link dashboard-listings__link--muted"
+                    >
+                      Edit details
+                    </Link>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </Layout>
   );
 }

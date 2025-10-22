@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 from typing import List, Dict, Any, Optional
+import re
+from difflib import SequenceMatcher
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -56,6 +58,7 @@ def get_current_user_id(credential: HTTPAuthorizationCredentials = Depends(_http
 def list_listings(
     seller_id: Optional[str] = None,
     sold: Optional[bool] = None,
+    search: Optional[str] = None,
 ) -> List[schemas.Listing]:
     # return all listings, optional filtering by seller or sold flag
 
@@ -65,7 +68,50 @@ def list_listings(
     if sold is not None:
         filters["sold"] = sold
     listings = database.get_listings(filters if filters else None)
-    return listings
+    if not search:
+        return listings
+
+    term = search.strip().lower()
+    if not term:
+        return listings
+
+    def _tokenize(value: str) -> List[str]:
+        return re.findall(r"[a-z0-9]+", value.lower())
+
+    def _score_listing(item: Dict[str, Any]) -> float:
+        fields = [
+            str(item.get("name", "")),
+            str(item.get("category", "")),
+            str(item.get("description", "")),
+        ]
+        scores = []
+        for field in fields:
+            if not field:
+                continue
+            field_lower = field.lower()
+            if term in field_lower:
+                scores.append(1.0)
+                continue
+            scores.append(SequenceMatcher(None, term, field_lower).ratio())
+            tokens = _tokenize(field)
+            for token in tokens:
+                if term in token:
+                    scores.append(0.95)
+                else:
+                    scores.append(SequenceMatcher(None, term, token).ratio())
+        return max(scores) if scores else 0.0
+
+    scored = []
+    for listing in listings:
+        score = _score_listing(listing)
+        if score >= 0.35:
+            scored.append((score, listing))
+
+    if not scored:
+        return listings
+
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [item for _, item in scored]
 
 
 @app.post("/listings", response_model=schemas.Listing, status_code=status.HTTP_201_CREATED)
@@ -236,3 +282,11 @@ def update_order(
         return order
     updated = database.update_order(order_id, update_fields)
     return updated
+
+
+@app.get("/users/{user_id}", response_model=schemas.UserProfile)
+def retrieve_user_profile(user_id: str):
+    profile = database.get_user_profile(user_id)
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return profile

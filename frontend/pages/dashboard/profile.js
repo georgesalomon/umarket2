@@ -190,7 +190,7 @@ export default function ProfileDashboard() {
                 onChange={handleAvatarUpload}
                 disabled={uploading}
               />
-              {uploading ? 'Uploading…' : 'Change photo'}
+              {uploading ? 'Uploading…' : avatarUrl ? 'Change photo' : 'Add photo'}
             </label>
           </div>
           <div className="profile-card__body">
