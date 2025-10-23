@@ -4,7 +4,7 @@ UMarket is a marketplace designed specifically for UMass students. It allows
 students to create item listings, browse listings and request to
 purchase items from other students. Access is restricted to users with a
 `@umass.edu` email address via Supabase Auth hooks. This repository
-implementation with a FastAPI backend and Next.js frontend.
+implements a FastAPI backend and Next.js frontend.
 
 ## Features
 
@@ -19,10 +19,12 @@ implementation with a FastAPI backend and Next.js frontend.
 - **Purchase workflow:** Buyers record purchases for available items and choose a
   preferred payment method. Quantities decrement automatically and listings are marked
   sold when inventory reaches zero.
+- **Student profiles:** Sellers manage a public profile, including avatars stored in a Supabase
+  Storage bucket and short bios shared on listing detail pages.
 
 ## Project structure
 
-```
+``` 
 umarket/
 ├── backend/         # FastAPI application
 │   ├── main.py      # API routes
@@ -45,11 +47,14 @@ umarket/
 │   │   ├── login.js
 │   │   ├── dashboard/
 │   │   │   ├── listings.js
-│   │   │   └── orders.js
-│   │   └── items/
-│   │       ├── [id].js
-│   │       ├── [id]/edit.js
-│   │       └── new.js
+│   │   │   ├── orders.js
+│   │   │   └── profile.js
+│   │   ├── items/
+│   │   │   ├── [id].js
+│   │   │   ├── [id]/edit.js
+│   │   │   └── new.js
+│   │   └── users/
+│   │       └── [id].js
 │   ├── utils/
 │   │   ├── apiClient.js
 │   │   └── supabaseClient.js
@@ -71,9 +76,8 @@ umarket/
      Postgres function. The SQL for this function is included below.
    - Toggle the hook to **enabled**.
 3. **Create tables** in the Supabase SQL editor. The base app relies on the
-   `Product` and `Transactions` tables (your project may already have the
-   category-specific tables shown in the ERD above). The SQL below sets up the
-   core data model and row‑level security (RLS) policies:
+   `Product` and `Transactions` tables. The SQL below sets up the core data model
+   (including the `category` column required by the app) and row-level security (RLS) policies:
 
    ```sql
    -- Core product table (one row per marketplace item)
@@ -85,6 +89,7 @@ umarket/
      name text not null,
      price numeric not null check (price >= 0),
      quantity integer not null default 1 check (quantity >= 0),
+     category text not null default 'miscellaneous',
      sold boolean not null default false,
      created_at timestamptz not null default now()
    );
@@ -147,27 +152,51 @@ umarket/
 
    Afterwards, enable a Before User Created hook using this function via
    **Authentication → Configuration → Auth Hooks (Beta)**.
+5. **Set up the avatars storage bucket**:
+   - Go to **Storage → Buckets** and create a bucket named `avatars` (or any name you prefer).
+   - Mark the bucket as **public** so listing pages can display profile photos.
+   - In **Policies**, allow authenticated users to upload/update files within their folder scope.
+   - If you choose a different bucket name, update the frontend and backend environment variables
+     called `NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET` and `SUPABASE_AVATAR_BUCKET` to match.
 
 ## Running the backend
 
 1. Copy the example environment file and set your Supabase credentials:
 
+   macOS/Linux:
    ```bash
    cp backend/.env.example backend/.env
+   # Edit backend/.env and set SUPABASE_URL, SUPABASE_API_KEY, SUPABASE_JWT_SECRET, FRONTEND_URLS
+   ```
+
+   Windows (PowerShell):
+   ```powershell
+   Copy-Item backend/.env.example backend/.env
    # Edit backend/.env and set SUPABASE_URL, SUPABASE_API_KEY, SUPABASE_JWT_SECRET, FRONTEND_URLS
    ```
 
    If your Supabase tables use different names or primary key columns, you can
    override the defaults by setting `SUPABASE_PRODUCTS_TABLE`,
    `SUPABASE_PRODUCT_ID_FIELD`, `SUPABASE_TRANSACTIONS_TABLE`, or
-   `SUPABASE_TRANSACTION_ID_FIELD` in `backend/.env`.
+   `SUPABASE_TRANSACTION_ID_FIELD` in `backend/.env`. Set `SUPABASE_AVATAR_BUCKET`
+   if you created a storage bucket name that differs from `avatars`.
 
 2. Install dependencies and start the server (requires Python 3.10+):
 
+   macOS/Linux:
    ```bash
    cd backend
    python -m venv venv
    source venv/bin/activate
+   pip install -r requirements.txt
+   uvicorn main:app --reload
+   ```
+
+   Windows (PowerShell):
+   ```powershell
+   Set-Location backend
+   python -m venv venv
+   .\venv\Scripts\Activate
    pip install -r requirements.txt
    uvicorn main:app --reload
    ```
@@ -186,11 +215,20 @@ docker run -p 8000:8000 --env-file backend/.env umarket-backend
 
 1. Copy the example environment file and set your Supabase project values:
 
+   macOS/Linux:
    ```bash
    cd frontend
    cp .env.local.example .env.local
    # Edit .env.local and set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
-   # NEXT_PUBLIC_GOOGLE_CLIENT_ID, and NEXT_PUBLIC_API_BASE
+   # NEXT_PUBLIC_GOOGLE_CLIENT_ID, NEXT_PUBLIC_API_BASE, and NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET
+   ```
+
+   Windows (PowerShell):
+   ```powershell
+   Set-Location frontend
+   Copy-Item .env.local.example .env.local
+   # Edit .env.local and set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
+   # NEXT_PUBLIC_GOOGLE_CLIENT_ID, NEXT_PUBLIC_API_BASE, and NEXT_PUBLIC_SUPABASE_AVATAR_BUCKET
    ```
 
 2. Install dependencies and start the development server:
