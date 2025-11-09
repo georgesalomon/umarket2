@@ -1,6 +1,6 @@
-#fast api for umarktet backend
-
 from __future__ import annotations
+
+
 
 import os
 from typing import List, Dict, Any, Optional
@@ -11,13 +11,19 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import jwt
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-from . import database, schemas
+from backend import database, schemas
+from . import stripe_logic
+
 
 app = FastAPI(title="UMarket API", version="0.1.0")
 
 frontend_origin_env = os.getenv("FRONTEND_URLS") or os.getenv("FRONTEND_URL", "http://localhost:3000")
 frontend_origins = [origin.strip() for origin in frontend_origin_env.split(",") if origin.strip()]
+
+class CheckoutSessionRequest(BaseModel):
+    listing_id: str
 
 app.add_middleware(
     CORSMiddleware,
@@ -293,6 +299,7 @@ def create_order(order: schemas.OrderCreate, user_id: str = Depends(get_current_
     return created
 
 
+
 @app.patch("/orders/{order_id}", response_model=schemas.Order)
 def update_order(
     order_id: str,
@@ -325,3 +332,24 @@ def retrieve_user_profile(user_id: str):
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return profile
+
+
+
+@app.post("/stripe/create-checkout-session")
+def create_checkout_session(
+    payload: CheckoutSessionRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    try:
+        url = stripe_logic.create_checkout_session_for_listing(
+            listing_id=payload.listing_id,
+            buyer_id=user_id,
+            frontend_domain="http://localhost:3000",
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    return {"url": url}

@@ -328,43 +328,59 @@ export default function ListingDetail() {
   }
 
   async function handleRequestPurchase() {
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-    if (!accessToken) {
-      setOrderError('Missing access token');
-      return;
-    }
-    if (!listing) return;
+  if (!user) {
+    router.push('/login');
+    return;
+  }
+  if (!accessToken) {
+    setOrderError('Missing access token');
+    return;
+  }
+  if (!listing) return;
 
-    setOrderSubmitting(true);
-    setOrderError(null);
-    setMessage(null);
+  setOrderSubmitting(true);
+  setOrderError(null);
+  setMessage(null);
 
-    try {
-      await apiFetch('/orders', {
+  try {
+    
+  if (paymentMethod === 'STRIPE') {
+      const data = await apiFetch('/stripe/create-checkout-session', {
         method: 'POST',
-        body: { listing_id: listing.id, payment_method: paymentMethod },
+        body: { listing_id: listing.id },
         accessToken,
       });
-      setMessage('Purchase recorded. The seller has been notified.');
-      setListing((prev) => {
-        if (!prev) return prev;
-        const nextQuantity =
-          typeof prev.quantity === 'number' ? Math.max(prev.quantity - 1, 0) : 0;
-        return {
-          ...prev,
-          quantity: nextQuantity,
-          sold: nextQuantity === 0 ? true : prev.sold,
-        };
-      });
-    } catch (err) {
-      setOrderError(err.message);
-    } finally {
-      setOrderSubmitting(false);
+
+      if (!data || !data.url) {
+        throw new Error('Unable to start Stripe checkout');
+      }
+      window.location.href = data.url;
+      return; 
     }
+
+    
+    await apiFetch('/orders', {
+      method: 'POST',
+      body: { listing_id: listing.id, payment_method: paymentMethod },
+      accessToken,
+    });
+    setMessage('Purchase recorded. The seller has been notified.');
+    setListing((prev) => {
+      if (!prev) return prev;
+      const nextQuantity =
+        typeof prev.quantity === 'number' ? Math.max(prev.quantity - 1, 0) : 0;
+      return {
+        ...prev,
+        quantity: nextQuantity,
+        sold: nextQuantity === 0 ? true : prev.sold,
+      };
+    });
+  } catch (err) {
+    setOrderError(err.message);
+  } finally {
+    setOrderSubmitting(false);
   }
+}
 
   async function handleStartChat() {
     if (!user) {
