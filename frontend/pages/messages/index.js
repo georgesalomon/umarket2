@@ -546,10 +546,18 @@ export default function MessagesPage() {
   const hasChats = decoratedChats.length > 0;
   const messagesForSelected = selectedChat ? messagesMap[selectedChat.id] || [] : [];
   const counterpartProfile = selectedChat?.counterpartProfile || null;
+  const counterpartId = selectedChat?.counterpartId || counterpartProfile?.id || null;
   const counterpartName =
     counterpartProfile?.full_name || counterpartProfile?.email || 'Marketplace user';
   const counterpartAvatar = counterpartProfile?.avatar_url || null;
   const counterpartInitials = getInitials(counterpartName);
+  const counterpartHeading = counterpartId ? (
+    <Link href={`/users/${counterpartId}`} className="messages-thread__name-link">
+      {counterpartName}
+    </Link>
+  ) : (
+    counterpartName
+  );
   const productName = selectedChat?.product?.name || 'Listing';
 
   if (authLoading) {
@@ -664,7 +672,7 @@ export default function MessagesPage() {
                       )}
                     </span>
                     <div>
-                      <h2>{counterpartName}</h2>
+                      <h2>{counterpartHeading}</h2>
                       <p>
                         Talking about{' '}
                         {selectedChat.product?.prod_id ? (

@@ -224,7 +224,11 @@ def _normalize_order(record: Dict[str, Any]) -> Dict[str, Any]:
     if not record:
         return record
     normalized = dict(record)
-    order_id = normalized.get(TRANSACTION_ID_FIELD) or normalized.get("id")
+    order_id = (
+        normalized.get(TRANSACTION_ID_FIELD)
+        or normalized.get("id")
+        or normalized.get("prod_id")
+    )
     if order_id:
         normalized["id"] = order_id
     product = normalized.get("product")
