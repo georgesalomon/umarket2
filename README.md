@@ -51,8 +51,8 @@ implements a FastAPI backend and Next.js frontend.
 
 
 ## TODO 
-move search bar to sticky on bottom on mobile view
-allow users to cancel orders if they regret buying, so that the buyer won't need to list all the details again. 
+- move search bar to sticky on bottom on mobile view
+- allow users to cancel orders if they regret buying, so that the buyer won't need to list all the details again. 
 
 
 ## Project structure
