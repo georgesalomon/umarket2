@@ -523,6 +523,9 @@ def create_order(order_data: Dict[str, Any]) -> Dict[str, Any]:
     product_select = _select_clause_with_details()
     params = {"select": f"*,product:{_product_relationship()}({product_select})"}
     resp = requests.post(url, headers=headers, params=params, json=order_data)
+    if not resp.ok:
+        print("SUPABASE STATUS:", resp.status_code)
+        print("SUPABASE BODY:", resp.text)
     resp.raise_for_status()
     created = resp.json()
     return _normalize_order(created[0])

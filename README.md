@@ -26,6 +26,7 @@ implements a FastAPI backend and Next.js frontend.
   single queue to review potential scams.
 - **Student profiles:** Sellers manage a public profile, including avatars stored in a Supabase
   Storage bucket and short bios shared on listing detail pages.
+- **Full mobile support:** dynamic UI shrinks into a Hamburger menu when too narrow. Keeps page clean and readable. 
 
 ## On-site payment confirmations
 
@@ -47,6 +48,12 @@ implements a FastAPI backend and Next.js frontend.
   under review, resolved, dismissed). Reporters can add more detail while the report stays open.
 - Students can review their submitted reports at the bottom of **Dashboard → Orders** so they can
   monitor statuses and share follow-up info with moderators if needed.
+
+
+## TODO 
+move search bar to sticky on bottom on mobile view
+allow users to cancel orders if they regret buying, so that the buyer won't need to list all the details again. 
+
 
 ## Project structure
 
