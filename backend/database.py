@@ -13,7 +13,11 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 import requests
 
 SUPABASE_URL: Optional[str] = os.environ.get("SUPABASE_URL")
-SUPABASE_API_KEY: Optional[str] = os.environ.get("SUPABASE_API_KEY")
+
+SUPABASE_ANON_KEY: Optional[str] = os.environ.get("SUPABASE_ANON_KEY")
+SUPABASE_SERVICE_ROLE_KEY: Optional[str] = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_API_KEY")
+
+
 PRODUCTS_TABLE: str = os.environ.get("SUPABASE_PRODUCTS_TABLE", "Product")
 PRODUCT_ID_FIELD: str = os.environ.get("SUPABASE_PRODUCT_ID_FIELD", "prod_id")
 TRANSACTIONS_TABLE: str = os.environ.get("SUPABASE_TRANSACTIONS_TABLE", "Transactions")
@@ -36,23 +40,43 @@ REPORT_ID_FIELD: str = os.environ.get("SUPABASE_REPORT_ID_FIELD", "id")
 
 
 def _ensure_config():
-    # Refresh from environment in case load happened later or server reloaded
-    global SUPABASE_URL, SUPABASE_API_KEY
-    if not SUPABASE_URL or not SUPABASE_API_KEY:
+    # Refresh from environment in case load happened later or server reloaded    
+    global SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
         SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").rstrip("/")
-        SUPABASE_API_KEY = os.environ.get("SUPABASE_API_KEY")
-    if not SUPABASE_URL or not SUPABASE_API_KEY:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_API_KEY environment variables must be set")
+        SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
+        SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_API_KEY")
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        raise RuntimeError("SUPABASE_URL and SUPABASE_ANON_KEY must be set")
 
-def _headers() -> Dict[str, str]:
-    #construct headers for supabase REST requests
 
-    return {
-        "apikey": SUPABASE_API_KEY or "",
-        "Authorization": f"Bearer {SUPABASE_API_KEY}",
+def _user_headers(user_jwt: Optional[str]) -> Dict[str, str]:
+    _ensure_config()
+    h = {
+        "apikey": SUPABASE_ANON_KEY or "",
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
+    # If user_jwt exists, RLS will apply based on auth.uid()
+    if user_jwt:
+        h["Authorization"] = f"Bearer {user_jwt}"
+    else:
+        # anon read (public endpoints)
+        h["Authorization"] = f"Bearer {SUPABASE_ANON_KEY}"
+    return h
+
+
+def _admin_headers() -> Dict[str, str]:
+    _ensure_config()
+    if not SUPABASE_SERVICE_ROLE_KEY:
+        raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_API_KEY) must be set for admin operations")
+    return {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
 
 
 def _normalize_clothing_details(record: Dict[str, Any]) -> Dict[str, Any]:
@@ -317,7 +341,7 @@ def _normalize_report(record: Dict[str, Any]) -> Dict[str, Any]:
 
 def _upsert_category_detail(table: str, id_field: str, payload: Dict[str, Any]) -> None:
     url = f"{SUPABASE_URL}/rest/v1/{table}"
-    headers = _headers()
+    headers = _user_headers(user_jwt)
     headers["Prefer"] = "resolution=merge-duplicates,return=representation"
     params = {"on_conflict": id_field}
     resp = requests.post(url, headers=headers, params=params, json=payload)
@@ -397,7 +421,7 @@ def create_listing(
 
     _ensure_config()
     url = f"{SUPABASE_URL}/rest/v1/{PRODUCTS_TABLE}"
-    headers = _headers()
+    headers = _user_headers(user_jwt)
     headers["Prefer"] = "return=representation"
     resp = requests.post(url, headers=headers, json=listing_data)
     if not resp.ok:
@@ -425,7 +449,7 @@ def update_listing(
 
     _ensure_config()
     url = f"{SUPABASE_URL}/rest/v1/{PRODUCTS_TABLE}"
-    headers = _headers()
+    headers = _admin_headers()
     headers["Prefer"] = "return=representation"
     resp = requests.patch(
         url,
@@ -490,7 +514,7 @@ def get_user_profile(user_id: str) -> Optional[Dict[str, Any]]:
     return profile
 
 
-def get_orders(filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+def get_orders(filters: Optional[Dict[str, Any]] = None, user_jwt: Optional[str] = None) -> List[Dict[str, Any]]:
     # return transactions for products
 
     _ensure_config()
@@ -506,7 +530,7 @@ def get_orders(filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]
                 params[key] = f"eq.{str(value).lower()}"
             else:
                 params[key] = f"eq.{value}"
-    resp = requests.get(url, headers=_headers(), params=params)
+resp = requests.get(url, headers=_user_headers(user_jwt), params=params)
     resp.raise_for_status()
     data = resp.json()
     if isinstance(data, dict) and data.get("message"):
@@ -514,11 +538,11 @@ def get_orders(filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]
     return [_normalize_order(order) for order in data]
 
 
-def create_order(order_data: Dict[str, Any]) -> Dict[str, Any]:
+def create_order(order_data: Dict[str, Any], user_jwt: Optional[str] = None) -> Dict[str, Any]:
     # insert a new transaction and return the created record
     _ensure_config()
     url = f"{SUPABASE_URL}/rest/v1/{TRANSACTIONS_TABLE}"
-    headers = _headers()
+    headers = _user_headers(user_jwt)
     headers["Prefer"] = "return=representation"
     product_select = _select_clause_with_details()
     params = {"select": f"*,product:{_product_relationship()}({product_select})"}
@@ -531,7 +555,7 @@ def create_order(order_data: Dict[str, Any]) -> Dict[str, Any]:
     return _normalize_order(created[0])
 
 
-def get_order(order_id: str) -> Optional[Dict[str, Any]]:
+def get_order(order_id: str, user_jwt: Optional[str] = None) -> Optional[Dict[str, Any]]:
     # return a single transaction by its id or None if it is not found
     _ensure_config()
     url = f"{SUPABASE_URL}/rest/v1/{TRANSACTIONS_TABLE}"
@@ -554,11 +578,11 @@ def get_order(order_id: str) -> Optional[Dict[str, Any]]:
     return _normalize_order(data[0])
 
 
-def update_order(order_id: str, order_data: Dict[str, Any]) -> Dict[str, Any]:
+def update_order(order_id: str, order_data: Dict[str, Any], user_jwt: Optional[str] = None) -> Dict[str, Any]:
     #update a transaction and return the updated record
     _ensure_config()
     url = f"{SUPABASE_URL}/rest/v1/{TRANSACTIONS_TABLE}"
-    headers = _headers()
+    headers = _user_headers(user_jwt)
     headers["Prefer"] = "return=representation"
     product_select = _select_clause_with_details()
     params = {
@@ -603,7 +627,7 @@ def get_report(report_id: str) -> Optional[Dict[str, Any]]:
 def create_report(report_data: Dict[str, Any]) -> Dict[str, Any]:
     _ensure_config()
     url = f"{SUPABASE_URL}/rest/v1/{REPORTS_TABLE}"
-    headers = _headers()
+    headers = _user_headers(user_jwt)
     headers["Prefer"] = "return=representation"
     params = {"select": "*"}
     resp = requests.post(url, headers=headers, params=params, json=report_data)
@@ -615,7 +639,7 @@ def create_report(report_data: Dict[str, Any]) -> Dict[str, Any]:
 def update_report(report_id: str, report_data: Dict[str, Any]) -> Dict[str, Any]:
     _ensure_config()
     url = f"{SUPABASE_URL}/rest/v1/{REPORTS_TABLE}"
-    headers = _headers()
+    headers = _user_headers(user_jwt)
     headers["Prefer"] = "return=representation"
     params = {
         REPORT_ID_FIELD: f"eq.{report_id}",
